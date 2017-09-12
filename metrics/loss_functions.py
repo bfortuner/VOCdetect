@@ -1,5 +1,7 @@
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
+
 from . import metric_utils
 
 
@@ -69,6 +71,25 @@ class SmoothF2Loss():
         f2 = get_smooth_f2_score(output, target, thresholds, self.c) * self.f2_weight
         bce = F.binary_cross_entropy(output, target) * self.bce_weight
         return f2 + bce
+
+
+class L2Norm(nn.Module):
+    def __init__(self,n_channels, scale):
+        super().__init__()
+        self.n_channels = n_channels
+        self.gamma = scale or None
+        self.eps = 1e-10
+        self.weight = nn.Parameter(torch.Tensor(self.n_channels))
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.constant(self.weight,self.gamma)
+
+    def forward(self, x):
+        norm = x.pow(2).sum(dim=1, keepdim=True).sqrt()+self.eps
+        x /= norm
+        out = self.weight.unsqueeze(0).unsqueeze(2).unsqueeze(3).expand_as(x) * x
+        return out
 
 
 

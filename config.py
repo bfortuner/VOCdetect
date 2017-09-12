@@ -1,19 +1,22 @@
 import os
 import socket
-import init_project
 import constants as c
+import competitions.pascalvoc as comp
+
 
 # Main config
 HOSTNAME = socket.gethostname()
-PROJECT_NAME = 'dogscats'
-PROJECT_PATH = '/bigguy/data/' + PROJECT_NAME
-PROJECT_TYPE = c.SEGMENTATION
-IMG_INPUT_FORMATS = [c.JPG]
-IMG_TARGET_FORMATS = [c.BCOLZ] #segmentation or generative
-IMG_DATASET_TYPES = [c.TRAIN, c.TEST]
-METADATA_PATH = os.path.join(PROJECT_PATH, 'metadata.csv')
-PATHS = init_project.init_paths(PROJECT_PATH, IMG_DATASET_TYPES,
-    IMG_INPUT_FORMATS, IMG_TARGET_FORMATS)
+PROJECT_NAME = comp.PROJECT_NAME
+PROJECT_PATH = comp.PROJECT_PATH
+PROJECT_TYPE = comp.PROJECT_TYPE
+IMG_INPUT_FORMATS = comp.IMG_INPUT_FORMATS
+IMG_TARGET_FORMATS = comp.IMG_TARGET_FORMATS
+IMG_DATASET_TYPES = comp.IMG_DATASET_TYPES
+METADATA_PATH = comp.METADATA_PATH #os.path.join(PROJECT_PATH, 'metadata.csv')
+PATHS = comp.PATHS
+LABEL_NAMES = comp.LABEL_NAMES
+LABEL_TO_IDX = comp.LABEL_TO_IDX
+IDX_TO_LABEL = comp.IDX_TO_LABEL
 
 # AWS Config
 AWS_ACCESS_KEY = os.getenv('KAGGLE_AWS_ACCESS_KEY', 'dummy')

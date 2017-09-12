@@ -4,6 +4,7 @@ import numpy as np
 import utils
 from glob import glob
 from PIL import Image
+import cv2
 from skimage import io
 import torch
 
@@ -11,6 +12,12 @@ import config as cfg
 import constants as c
 from datasets import metadata
 
+
+
+def cv2_loader(path, color=None):
+    if color is not None:
+        return cv2.imread(path, color)
+    return cv2.imread(path)
 
 
 def pil_loader(path):

@@ -29,6 +29,43 @@ CLASS_COLORS = {
 }
 
 
+def plot_img_w_bboxes(img_arr, bboxes, title=None):
+    """
+    img_arr: numpy_arr
+    bboxes: [
+        {
+            'label':'person',
+            'xmin':34,
+            'ymin':120,
+            'xmax':233,
+            'ymax':231
+        }
+        ...
+    ]
+    """
+    plt.clf()
+    plt.imshow(img_arr)
+    plt.title(title)
+    plt.axis('off')
+    ax = plt.gca()
+    colors = plt.cm.hsv(np.linspace(0, 1, len(
+        cfg.LABEL_NAMES))).tolist()
+    for bbox in bboxes:
+        xy = bbox['xmin'], bbox['ymin']
+        width = bbox['xmax'] - bbox['xmin']
+        height = bbox['ymax'] - bbox['ymin']
+        color = colors[cfg.LABEL_TO_IDX[bbox['label']]]
+        box = plt.Rectangle(xy, width, height, fill=False, 
+                            edgecolor=color, linewidth=3)
+        ax.add_patch(box)
+        if 'score' in bbox:
+            text = '%s: %.2f' % (bbox['label'], bbox['score'])
+        else:
+            text = bbox['label']
+        ax.text(bbox['xmin'], bbox['ymin'], text, 
+                bbox={'facecolor':color, 'alpha':0.5})
+
+
 def is_image_file(filename):
     return any(filename.endswith(extension) for extension in c.IMG_EXTS)
 

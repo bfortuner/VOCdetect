@@ -1,5 +1,6 @@
 import os
 import torch.utils.data
+from torch.autograd import Variable
 from torch.utils.data import DataLoader
 from config import *
 import utils.imgs as img_utils
@@ -70,11 +71,16 @@ def detection_collate(batch):
         A tuple containing:
             1) (tensor) batch of images stacked on their 0 dim
             2) (list of tensors) annotations for a given image are stacked on 0 dim
+            3) (dict) height & width of original img 
     """
     targets = []
     imgs = []
-    for sample in batch:
-        imgs.append(sample[0])
-        targets.append(torch.FloatTensor(sample[1]))
+    dims = []
+    idxs = []
+    for img, targs, dim, idx in batch:
+        imgs.append(img)
+        targets.append(torch.FloatTensor(targs))
+        dims.append(dim)
+        idxs.append(idx)
     imgs = torch.stack(imgs, 0)
-    return imgs, targets
+    return imgs, targets, dims, idxs

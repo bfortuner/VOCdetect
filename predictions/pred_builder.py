@@ -24,6 +24,18 @@ def build_metadata(labels, scores, thresholds, pred_type, dset):
     }
 
 
+def build_obj_detect_pred(preds, scores, thresh, dset):
+    dict_ = {
+        'scores': scores,
+        'thresh': thresh, 
+        'dset': dset,
+        'imgs': {},
+    }
+    for pred in preds:
+        dict_['imgs'][pred['img_id']] = pred
+    return dict_
+
+
 def build_pred(name, preds, probs, val_preds, val_probs, labels, loss,
                score, thresholds, w_fpath, exp_name, tta, dset):
     name = PRED_TYPE + '-' + name

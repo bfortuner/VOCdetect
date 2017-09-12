@@ -1,14 +1,17 @@
 import time
 import torch
+import torch.nn as nn
 import numpy as np
 import logging
 from torch.autograd import Variable
 
+import config as cfg
 import constants as c
 from predictions import pred_utils
 from metrics import metric
 from metrics import metric_utils
 from . import utils as trn_utils
+from utils import imgs
 
 
 
@@ -325,11 +328,13 @@ class ImageTargetTrainer(Trainer):
 
 class SSDTrainer(Trainer):
     def __init__(self, trn_criterion, tst_criterion, optimizer, 
-                 lr_adjuster, tst_transform, idx_to_labels, detect_fn):
-        super().__init__(trn_criterion, tst_criterion, optimizer, lr_adjuster)
-        self.tst_transform = tst_transform
+                 lr_adjuster, idx_to_labels, detect_fn):
+        super().__init__(trn_criterion, tst_criterion, 
+                         optimizer, lr_adjuster)
         self.idx_to_labels = idx_to_labels
         self.detect_fn = detect_fn
+        # random_batch_index = np.random.randint(images.size(0))
+        # viz.image(images.data[random_batch_index].cpu().numpy())
         
     def train(self, model, loader, thresholds, epoch, metrics):
         model.train()
@@ -379,42 +384,101 @@ class SSDTrainer(Trainer):
 
         loss_data = 0
         n_imgs = len(loader.dataset)
-        # probs = np.empty((0, n_classes))
-        # labels = np.empty((0, n_classes))
         metric_totals = {m.name:0 for m in metrics}
+        
+        for img, targs, dims, idx in loader:
+            print(dims)
+            img = Variable(img.cuda(async=True))
+            targets = [Variable(anno.cuda(async=True),
+                      volatile=True) for anno in targs]
 
-        for i in range(n_imgs):
-            img = loader.dataset.get_image(i)
-            bboxes = loader.dataset.get_bboxes(i)
-            x = torch.from_numpy(self.tst_transform(img)[0]).permute(2, 0, 1)
-            x = Variable(x.cuda().unsqueeze(0))
-            print(x.size())
+            out = model(img)
+            detections = self.detect_fn(
+                out[0],
+                nn.Softmax()(out[1].view(-1, 21)),
+                out[2].type(type(out[2].data))
+            ).data
 
-            out = model(x)
-            detections = self.detect_fn(out).data
-            scale = torch.Tensor([img.shape[1], img.shape[0],
-                                img.shape[1], img.shape[0]])
+            loss_l, loss_c = self.tst_criterion(out, targets)
+            loss = loss_l + loss_c
+            loss_data += loss.data[0]
+
+            w = dims[0]['w']
+            h = dims[0]['h']
+            scale = torch.Tensor([w, h, w, h])
+            bboxes = []
             pred_num = 0
             for i in range(detections.size(1)):
                 j = 0
-                while detections[0, i, j, 0] >= thresholds:
-                    score = detections[0, i, j, 0]
-                    label_name = self.idx_to_labels[i-1]
-                    pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
-                    coords = (pt[0], pt[1], pt[2], pt[3])
-                    pred_num += 1
-                    print(str(pred_num)+' label: '+label_name+' score: ' +
+                while detections[0,i,j,0] >= thresholds:
+                    score = detections[0,i,j,0]
+                    pt = (detections[0,i,j,1:]*scale).cpu().numpy()
+                    coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
+                    label = cfg.IDX_TO_LABEL[i-1]
+                    bboxes.append({
+                        'label': label,
+                        'score': score,
+                        'xmin':pt[0],
+                        'ymin':pt[1],
+                        'xmax':pt[2]+1,
+                        'ymax':pt[3]+1
+                    })
+                    j+=1
+                    print(str(pred_num)+' label: '+label+' score: ' +
                           str(score) + ' '+' || '.join(str(c) for c in coords) + '\n')
                     j += 1
+            # img_arr = imgs.load_img_as_arr(loader.dataset.get_fpath(idx[0]))
+            # imgs.plot_img_w_bboxes(img_arr, bboxes, title=loader.dataset.img_ids[idx[0]])
 
-            # probs = np.vstack([probs, output.data.cpu().numpy()])
-            # labels = np.vstack([labels, targets.data.cpu().numpy()])
+        loss_data /= len(loader)
 
-        # loss_data /= len(loader)
-        # # preds = pred_utils.get_predictions(probs, thresholds)
-
-        # for m in metrics:
-        #     score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
-        #     metric_totals[m.name] = score
+        for m in metrics:
+            score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
+            metric_totals[m.name] = score
 
         return metric_totals
+
+    def predict(self, model, img, orig_dims, thresh):
+        model.eval()
+        img = Variable(img.cuda(async=True))
+        out = model(img)
+        detections = self.detect_fn(
+            out[0],
+            nn.Softmax()(out[1].view(-1, 21)),
+            out[2].type(type(out[2].data))
+        ).data
+
+        w = orig_dims[0]['w']
+        h = orig_dims[0]['h']
+        scale = torch.Tensor([w, h, w, h])
+        bboxes = []
+        for i in range(detections.size(1)):
+            j = 0
+            while detections[0,i,j,0] >= thresh:
+                score = detections[0,i,j,0]
+                pt = (detections[0,i,j,1:]*scale).cpu().numpy()
+                coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
+                label = cfg.IDX_TO_LABEL[i-1]
+                bboxes.append({
+                    'label': label,
+                    'score': float(score),
+                    'xmin': float(pt[0]),
+                    'ymin': float(pt[1]),
+                    'xmax': float(pt[2]+1),
+                    'ymax': float(pt[3]+1)
+                })
+                j += 1
+
+        return bboxes
+
+    def get_predictions(self, model, loader, thresh):
+        preds = []
+        model.eval()
+        for img, targs, dims, idx in loader:
+            bboxes = self.predict(model, img, dims, thresh)
+            preds.append({
+                'img_id': loader.dataset.img_ids[idx[0]],
+                'bboxes': bboxes
+            })
+
+        return preds

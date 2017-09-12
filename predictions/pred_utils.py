@@ -170,6 +170,13 @@ def get_prediction_fpath(basename, dset):
     return os.path.join(cfg.PATHS['predictions'], fname)
 
 
+def save_obj_detect_pred(name, preds, scores, thresh, dset):
+    fpath = get_prediction_fpath(name, dset)
+    dict_ = pred_builder.build_obj_detect_pred(
+        preds, scores, thresh, dset)
+    utils.files.save_json(fpath, dict_)
+
+
 
 # refactor notebook helpers
 

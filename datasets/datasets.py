@@ -3,6 +3,7 @@ import os
 import cv2
 import numpy as np
 from . import data_utils
+import utils
 
 
 loaders = {
@@ -169,7 +170,8 @@ class ObjDetectDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         im, gt, h, w = self.pull_item(index)
-        return im, gt
+        dims = {'w':w, 'h':h}
+        return im, gt, dims, index
     
     def _get_target(self, img_id, width, height):
         if self.target_transform is None:

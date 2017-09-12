@@ -321,3 +321,100 @@ class ImageTargetTrainer(Trainer):
             metric_totals[m.name] /= n_batches
 
         return metric_totals
+
+
+class SSDTrainer(Trainer):
+    def __init__(self, trn_criterion, tst_criterion, optimizer, 
+                 lr_adjuster, tst_transform, idx_to_labels, detect_fn):
+        super().__init__(trn_criterion, tst_criterion, optimizer, lr_adjuster)
+        self.tst_transform = tst_transform
+        self.idx_to_labels = idx_to_labels
+        self.detect_fn = detect_fn
+        
+    def train(self, model, loader, thresholds, epoch, metrics):
+        model.train()
+
+        loss_data = 0
+        # probs = np.empty((0, n_classes))
+        # labels = np.empty((0, n_classes))
+        metric_totals = {m.name:0 for m in metrics}
+        cur_iter = int((epoch-1) * len(loader))+1
+
+        for inputs, targets, _, _ in loader:
+            # print(inputs.size())
+            inputs = Variable(inputs.cuda(async=True))
+            targets = [Variable(anno.cuda(async=True), 
+                    volatile=True) for anno in targets]
+
+            out = model(inputs)
+            # print(out[0].size(), out[1].size(), out[2].size())
+            self.optimizer.zero_grad()
+            loss_l, loss_c = self.trn_criterion(out, targets)
+            loss = loss_l + loss_c
+            loss.backward()
+            self.optimizer.step()
+
+            if self.lr_adjuster.iteration_type == 'mini_batch':
+                self.lr_adjuster.adjust(self.optimizer, cur_iter)
+            cur_iter += 1
+
+            loss_data += loss.data[0]
+            # probs = np.vstack([probs, output.data.cpu().numpy()])
+            # labels = np.vstack([labels, targets.data.cpu().numpy()])
+            if cur_iter % 10 == 0:
+                print('iter ' + repr(cur_iter) + ' || Loss: %.4f' % (
+                    loss.data[0]), end='\n')
+
+        loss_data /= len(loader)
+        # preds = pred_utils.get_predictions(probs, thresholds)
+
+        for m in metrics:
+            score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
+            metric_totals[m.name] = score
+
+        return metric_totals
+
+    def test(self, model, loader, thresholds, metrics):
+        model.eval()
+
+        loss_data = 0
+        n_imgs = len(loader.dataset)
+        # probs = np.empty((0, n_classes))
+        # labels = np.empty((0, n_classes))
+        metric_totals = {m.name:0 for m in metrics}
+
+        for i in range(n_imgs):
+            img = loader.dataset.get_image(i)
+            bboxes = loader.dataset.get_bboxes(i)
+            x = torch.from_numpy(self.tst_transform(img)[0]).permute(2, 0, 1)
+            x = Variable(x.cuda().unsqueeze(0))
+            print(x.size())
+
+            out = model(x)
+            detections = self.detect_fn(out).data
+            scale = torch.Tensor([img.shape[1], img.shape[0],
+                                img.shape[1], img.shape[0]])
+            pred_num = 0
+            for i in range(detections.size(1)):
+                j = 0
+                while detections[0, i, j, 0] >= thresholds:
+                    score = detections[0, i, j, 0]
+                    label_name = self.idx_to_labels[i-1]
+                    pt = (detections[0, i, j, 1:]*scale).cpu().numpy()
+                    coords = (pt[0], pt[1], pt[2], pt[3])
+                    pred_num += 1
+                    print(str(pred_num)+' label: '+label_name+' score: ' +
+                          str(score) + ' '+' || '.join(str(c) for c in coords) + '\n')
+                    j += 1
+
+            # probs = np.vstack([probs, output.data.cpu().numpy()])
+            # labels = np.vstack([labels, targets.data.cpu().numpy()])
+
+        # loss_data /= len(loader)
+        # # preds = pred_utils.get_predictions(probs, thresholds)
+
+        # for m in metrics:
+        #     score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
+        #     metric_totals[m.name] = score
+
+        return metric_totals

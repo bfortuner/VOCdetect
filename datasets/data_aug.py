@@ -647,7 +647,7 @@ class PhotometricDistort(object):
         return self.rand_light_noise(im, boxes, labels)
 
 
-class SSDAugmentation(object):
+class SSDAugmentation():
     def __init__(self, size=300, mean=(104, 117, 123)):
         self.mean = mean
         self.size = size
@@ -665,3 +665,15 @@ class SSDAugmentation(object):
 
     def __call__(self, img, boxes, labels):
         return self.augment(img, boxes, labels)
+
+
+class SSDBaseAugmentation():
+    def __init__(self, size, mean):
+        self.size = size
+        self.mean = np.array(mean, dtype=np.float32)
+
+    def __call__(self, img, boxes=None, labels=None):
+        img = cv2.resize(img, (self.size, self.size)).astype(np.float32)
+        img -= self.mean
+        img = img.astype(np.float32)
+        return img, boxes, labels

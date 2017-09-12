@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 
 def load_model(fpath, cuda=True):
@@ -65,9 +66,15 @@ def init_nested_layers(module, conv_init, fc_init):
 
 
 def init_weights(layer, conv_init, fc_init):
-    if isinstance(layer, torch.nn.Conv2d):
+    if isinstance(layer, torch.nn.Conv2d) and conv_init is not None:
         print("init", layer, "with", conv_init)
-        conv_init(layer.weight)
-    elif isinstance(layer, torch.nn.Linear):
+        conv_init(layer.weight.data)
+    elif isinstance(layer, torch.nn.Linear) and fc_init is not None:
         print("init", layer, "with", fc_init)
-        fc_init(layer.weight)
+        fc_init(layer.weight.data)
+
+
+def xavier(m):
+    if isinstance(m, nn.Conv2d):
+        nn.init.xavier_uniform(m.weight.data)
+        m.bias.data.zero_()

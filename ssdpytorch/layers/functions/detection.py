@@ -35,15 +35,18 @@ class Detect(Function):
             prior_data: (tensor) Prior boxes and variances from priorbox layers
                 Shape: [1,num_priors,4]
         """
+        print(loc_data.size(), conf_data.size(), prior_data.size())
         num = loc_data.size(0)  # batch size
         num_priors = prior_data.size(0)
         self.output.zero_()
         if num == 1:
             # size batch x num_classes x num_priors
             conf_preds = conf_data.t().contiguous().unsqueeze(0)
+            print(type(self.output))
         else:
             conf_preds = conf_data.view(num, num_priors,
                                         self.num_classes).transpose(2, 1)
+            print(type(self.output))
             self.output.expand_(num, self.num_classes, self.top_k, 5)
 
         # Decode predictions into bboxes.

@@ -22,7 +22,7 @@ class Detect(Function):
         if nms_thresh <= 0:
             raise ValueError('nms_threshold must be non negative.')
         self.conf_thresh = conf_thresh
-        self.variance = cfg['variance']
+        self.variance = v2['variance']
         self.output = torch.zeros(1, self.num_classes, self.top_k, 5)
 
     def forward(self, loc_data, conf_data, prior_data):
@@ -44,6 +44,7 @@ class Detect(Function):
         else:
             conf_preds = conf_data.view(num, num_priors,
                                         self.num_classes).transpose(2, 1)
+            print(type(self.output))
             self.output.expand_(num, self.num_classes, self.top_k, 5)
 
         # Decode predictions into bboxes.

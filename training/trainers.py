@@ -340,19 +340,15 @@ class SSDTrainer(Trainer):
         model.train()
 
         loss_data = 0
-        # probs = np.empty((0, n_classes))
-        # labels = np.empty((0, n_classes))
         metric_totals = {m.name:0 for m in metrics}
         cur_iter = int((epoch-1) * len(loader))+1
 
         for inputs, targets, _, _ in loader:
-            # print(inputs.size())
             inputs = Variable(inputs.cuda(async=True))
             targets = [Variable(anno.cuda(async=True), 
                     volatile=True) for anno in targets]
 
             out = model(inputs)
-            # print(out[0].size(), out[1].size(), out[2].size())
             self.optimizer.zero_grad()
             loss_l, loss_c = self.trn_criterion(out, targets)
             loss = loss_l + loss_c
@@ -364,17 +360,14 @@ class SSDTrainer(Trainer):
             cur_iter += 1
 
             loss_data += loss.data[0]
-            # probs = np.vstack([probs, output.data.cpu().numpy()])
-            # labels = np.vstack([labels, targets.data.cpu().numpy()])
             if cur_iter % 10 == 0:
                 print('iter ' + repr(cur_iter) + ' || Loss: %.4f' % (
                     loss.data[0]), end='\n')
 
         loss_data /= len(loader)
-        # preds = pred_utils.get_predictions(probs, thresholds)
 
         for m in metrics:
-            score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
+            score = m.evaluate(loss_data, preds=None, probs=None, targets=None)
             metric_totals[m.name] = score
 
         return metric_totals
@@ -387,7 +380,6 @@ class SSDTrainer(Trainer):
         metric_totals = {m.name:0 for m in metrics}
         
         for img, targs, dims, idx in loader:
-            print(dims)
             img = Variable(img.cuda(async=True))
             targets = [Variable(anno.cuda(async=True),
                       volatile=True) for anno in targs]
@@ -423,9 +415,6 @@ class SSDTrainer(Trainer):
                         'xmax':pt[2]+1,
                         'ymax':pt[3]+1
                     })
-                    j+=1
-                    print(str(pred_num)+' label: '+label+' score: ' +
-                          str(score) + ' '+' || '.join(str(c) for c in coords) + '\n')
                     j += 1
             # img_arr = imgs.load_img_as_arr(loader.dataset.get_fpath(idx[0]))
             # imgs.plot_img_w_bboxes(img_arr, bboxes, title=loader.dataset.img_ids[idx[0]])
@@ -433,7 +422,7 @@ class SSDTrainer(Trainer):
         loss_data /= len(loader)
 
         for m in metrics:
-            score = m.evaluate(loss_data, preds=None, probs=None, labels=None)
+            score = m.evaluate(loss_data, preds=None, probs=None, targets=None)
             metric_totals[m.name] = score
 
         return metric_totals

@@ -30,8 +30,8 @@ TIMEZONE = 'US/Pacific'
 
 # External Resources
 # If True, you must setup an S3 bucket, ES Instance, and SES address
-S3_ENABLED = bool(os.getenv('KAGGLE_S3_ENABLED', False))
-ES_ENABLED = bool(os.getenv('KAGGLE_ES_ENABLED', False))
+S3_ENABLED = False #bool(os.getenv('KAGGLE_S3_ENABLED', False))
+ES_ENABLED = False #bool(os.getenv('KAGGLE_ES_ENABLED', False))
 EMAIL_ENABLED = bool(os.getenv('KAGGLE_SES_ENABLED', False))
 
 

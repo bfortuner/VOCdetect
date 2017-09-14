@@ -115,3 +115,46 @@ def find_f2score_threshold(probs, targets, average='samples',
               ' @ threshold =', round(best,4))
     return round(best,6)
 
+
+def get_iou_score(A, B):
+    """
+    boxes = [x1, y1, x2, y2]
+    Area Overlap / Area Union
+    """
+    eps = 1e-7
+
+    I_x1 = max(A[0], B[0])
+    I_y1 = max(A[1], B[1])    
+    I_x2 = min(A[2], B[2])
+    I_y2 = min(A[3], B[3])
+
+    inter = (I_x2 - I_x1) * (I_y2 - I_y1)
+
+    A_area = (A[2] - A[0]) * (A[3] - A[1])
+    B_area = (B[2] - B[0]) * (B[3] - B[1])
+    
+    union = (A_area + B_area) - inter
+
+    return inter / float(union + eps)
+
+
+def get_ap(recall, precision):
+    """
+    recall - 
+    precision - 
+    """
+    # first append sentinel values at the end
+    mrec = np.concatenate(([0.], recall, [1.]))
+    mpre = np.concatenate(([0.], precision, [0.]))
+
+    # compute the precision envelope
+    for i in range(mpre.size - 1, 0, -1):
+        mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+
+    # to calculate area under PR curve, look for points
+    # where X axis (recall) changes value
+    i = np.where(mrec[1:] != mrec[:-1])[0]
+
+    # and sum (\Delta recall) * prec
+    ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
+    return ap

@@ -47,6 +47,7 @@ import models.resnet
 import models.unet
 import models.utils
 
+import metrics
 from metrics import evaluate
 from metrics import metric_utils
 from metrics import metric

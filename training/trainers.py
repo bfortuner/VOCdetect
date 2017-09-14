@@ -409,11 +409,11 @@ class SSDTrainer(Trainer):
                     label = cfg.IDX_TO_LABEL[i-1]
                     bboxes.append({
                         'label': label,
-                        'score': score,
-                        'xmin':pt[0],
-                        'ymin':pt[1],
-                        'xmax':pt[2]+1,
-                        'ymax':pt[3]+1
+                        'score': float(score),
+                        'xmin': float(pt[0]),
+                        'ymin': float(pt[1]),
+                        'xmax': float(pt[2]+1),
+                        'ymax': float(pt[3]+1)
                     })
                     j += 1
             # img_arr = imgs.load_img_as_arr(loader.dataset.get_fpath(idx[0]))
@@ -426,48 +426,3 @@ class SSDTrainer(Trainer):
             metric_totals[m.name] = score
 
         return metric_totals
-
-    def predict(self, model, img, orig_dims, thresh):
-        model.eval()
-        img = Variable(img.cuda(async=True))
-        out = model(img)
-        detections = self.detect_fn(
-            out[0],
-            nn.Softmax()(out[1].view(-1, 21)),
-            out[2].type(type(out[2].data))
-        ).data
-
-        w = orig_dims[0]['w']
-        h = orig_dims[0]['h']
-        scale = torch.Tensor([w, h, w, h])
-        bboxes = []
-        for i in range(detections.size(1)):
-            j = 0
-            while detections[0,i,j,0] >= thresh:
-                score = detections[0,i,j,0]
-                pt = (detections[0,i,j,1:]*scale).cpu().numpy()
-                coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1
-                label = cfg.IDX_TO_LABEL[i-1]
-                bboxes.append({
-                    'label': label,
-                    'score': float(score),
-                    'xmin': float(pt[0]),
-                    'ymin': float(pt[1]),
-                    'xmax': float(pt[2]+1),
-                    'ymax': float(pt[3]+1)
-                })
-                j += 1
-
-        return bboxes
-
-    def get_predictions(self, model, loader, thresh):
-        preds = []
-        model.eval()
-        for img, targs, dims, idx in loader:
-            bboxes = self.predict(model, img, dims, thresh)
-            preds.append({
-                'img_id': loader.dataset.img_ids[idx[0]],
-                'bboxes': bboxes
-            })
-
-        return preds

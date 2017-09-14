@@ -99,3 +99,15 @@ class EnsembleF2(Metric):
 
     def format(self, value):
         return value
+
+
+class IoU(Metric):
+    def __init__(self, threshold):
+        super().__init__('IoU', minimize=False)
+        self.threshold = threshold
+
+    def evaluate(self, loss, preds, probs, targets):
+        return metric_utils.get_iou_score(preds, targets)
+
+    def format(self, value):
+        return value

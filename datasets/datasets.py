@@ -140,7 +140,8 @@ class ImageTargetDataset(torch.utils.data.Dataset):
         input_, inp_path = self._get_input(index)
         target, tar_path = self._get_target(index)
         if self.joint_transform is not None:
-            input_, target = self.joint_transform(input_, target)
+            input_, target = self.joint_transform(
+                input_, target)
         return input_, target, inp_path, tar_path
 
     def __len__(self):
@@ -188,13 +189,17 @@ class ObjDetectDataset(torch.utils.data.Dataset):
 
         if self.transform is not None:
             target = np.array(target)
-            img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
+            img, boxes, labels = self.transform(
+                img, target[:, :4], target[:, 4])
             img = img[:, :, (2, 1, 0)]
-            target = np.hstack((boxes, np.expand_dims(labels, axis=1)))
-        return torch.from_numpy(img).permute(2, 0, 1), target, height, width
+            target = np.hstack((boxes, np.expand_dims(
+                labels, axis=1)))
+        return (torch.from_numpy(img).permute(2, 0, 1),
+            target, height, width)
 
     def get_image(self, index):
-        '''Returns the original image object at index in PIL form'''
+        '''Returns the original image object at 
+           index in PIL form'''
         img_path = self.get_fpath(index)
         return self.loader(img_path, cv2.IMREAD_COLOR)
 

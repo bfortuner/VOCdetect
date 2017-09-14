@@ -106,6 +106,18 @@ def parse_rec(filename):
                               int(bbox.find('ymax').text) - 1]
         objects.append(obj_struct)
 
+"""
+    Returns array of GT BBs for a given image
+        {
+            'name': label_name,
+            'bbox': [
+                [xmin, ymin, xmax, ymax],
+                [xmin, ymin, xmax, ymax],
+            ],
+            ...
+        }
+"""
+
     return objects
 
 
@@ -132,21 +144,45 @@ def get_voc_results_file_template(image_set, cls):
 
 
 def write_voc_results_file(all_boxes, dataset):
+
+    # For each class, write a separate file
     for cls_ind, cls in enumerate(labelmap):
         print('Writing {:s} VOC results file'.format(cls))
         filename = get_voc_results_file_template(set_type, cls)
         with open(filename, 'wt') as f:
+
+            # For all images in dataset
             for im_ind, index in enumerate(dataset.ids):
+
+                # Get N class detections for img_id
+                # Since there can be multiple boxes of same class predicted
                 dets = all_boxes[cls_ind+1][im_ind]
                 if dets == []:
                     continue
                 # the VOCdevkit expects 1-based indices
+                
+                # For each detection, formate and write line to file
+                # img_id, conf, xmin, ymin, xmax, ymax
                 for k in range(dets.shape[0]):
                     f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
                             format(index[1], dets[k, -1],
                                    dets[k, 0] + 1, dets[k, 1] + 1,
                                    dets[k, 2] + 1, dets[k, 3] + 1))
 
+"""
+        class1_GT = {
+        img_1: {
+            'bbox': [
+                [xmin, ymin, xmax, ymax],
+                [xmin, ymin, xmax, ymax],
+            ],
+            'det': [
+                False, # used to indicate we matched a detection to this box already so don't do it again
+                False
+            ]
+        }
+    }
+"""
 
 def do_python_eval(output_dir='output', use_07=True):
     cachedir = os.path.join(devkit_path, 'annotations_cache')
@@ -156,8 +192,14 @@ def do_python_eval(output_dir='output', use_07=True):
     print('VOC07 metric? ' + ('Yes' if use_07_metric else 'No'))
     if not os.path.isdir(output_dir):
         os.mkdir(output_dir)
+
+    # For each class
     for i, cls in enumerate(labelmap):
+
+        # Load the class detections file (model predictions)
         filename = get_voc_results_file_template(set_type, cls)
+
+        # Evaluate recall, precision, AP for this class/label
         rec, prec, ap = voc_eval(
            filename, annopath, imgsetpath.format(set_type), cls, cachedir,
            ovthresh=0.5, use_07_metric=use_07_metric)
@@ -246,13 +288,21 @@ cachedir: Directory for caching the annotations
     if not os.path.isdir(cachedir):
         os.mkdir(cachedir)
     cachefile = os.path.join(cachedir, 'annots.pkl')
-    # read list of images
+
+
+    # read list of images - separate img_id file since we don't have access to dataset.ids anymore
     with open(imagesetfile, 'r') as f:
         lines = f.readlines()
+
+    # Getting the img_ids
     imagenames = [x.strip() for x in lines]
     if not os.path.isfile(cachefile):
+
         # load annots
         recs = {}
+
+        #for each img_id get the cooresponding GT boxes (all classes)
+        # build a helper object `rects`
         for i, imagename in enumerate(imagenames):
             recs[imagename] = parse_rec(annopath % (imagename))
             if i % 100 == 0:
@@ -267,79 +317,215 @@ cachedir: Directory for caching the annotations
         with open(cachefile, 'rb') as f:
             recs = pickle.load(f)
 
-    # extract gt objects for this class
+    # get the GT boxes specific to this class
     class_recs = {}
     npos = 0
     for imagename in imagenames:
+
+        # Store list of GT BBs objects for this classname in `R`
         R = [obj for obj in recs[imagename] if obj['name'] == classname]
+
+        # Extract the BBoxes List from each BoxObj
         bbox = np.array([x['bbox'] for x in R])
+
         difficult = np.array([x['difficult'] for x in R]).astype(np.bool)
+        
+        # Store boolean for each Box stating whether we've matched it yet
+        # This is used to avoid double-predicting on the same GT, instead we take the most confident
         det = [False] * len(R)
+
+        # Remove difficult boxes from the total detection count?
         npos = npos + sum(~difficult)
+
+        # Store new class specific GT dictionary for every image with
+        # only the GT BBs matching this class
         class_recs[imagename] = {'bbox': bbox,
                                  'difficult': difficult,
                                  'det': det}
 
+    """
+    class1_GT = {
+        img_1: {
+            'bbox': [
+                [xmin, ymin, xmax, ymax],
+                [xmin, ymin, xmax, ymax],
+            ],
+            'det': [
+                False, # used to indicate we matched a detection to this box already so don't do it again
+                False
+            ]
+        }
+    }
+    """
+
     # read dets
+    # img_ids may show up multiple times in this file (once for each box detected)
     detfile = detpath.format(classname)
+
     with open(detfile, 'r') as f:
         lines = f.readlines()
     if any(lines) == 1:
 
         splitlines = [x.strip().split(' ') for x in lines]
+        # detection (many to one)
+        # img_id, conf, xmin, ymin, xmax, ymax
+        # img_id, conf, xmin, ymin, xmax, ymax
+
+        # Get image_id array
         image_ids = [x[0] for x in splitlines]
+        
+        # Get confidence array
         confidence = np.array([float(x[1]) for x in splitlines])
+
+        # Get BB array (importantly, a numpy matrix)
         BB = np.array([[float(z) for z in x[2:]] for x in splitlines])
 
-        # sort by confidence
+        # sort by confidence (default is ASC, so we negate)
         sorted_ind = np.argsort(-confidence)
         sorted_scores = np.sort(-confidence)
+
+        # Sort the BBs and Ids by confidence
+        # We are going to use this for "duplicate" detection
+        # If our model predictions similar boxes for the same GT
         BB = BB[sorted_ind, :]
         image_ids = [image_ids[x] for x in sorted_ind]
 
         # go down dets and mark TPs and FPs
-        nd = len(image_ids)
+        nd = len(image_ids) # These are actually detections, since image ids can show up multiple times
         tp = np.zeros(nd)
         fp = np.zeros(nd)
+
+        # Loop through the image ids indexs (ranked by confidence)
         for d in range(nd):
+
+            # Get the GT box annotation object
             R = class_recs[image_ids[d]]
+
+            # Get the Model Detected BBs (index, then N rows of different boxes)
             bb = BB[d, :].astype(float)
+            """
+            bb = np.array([x1,y1,x2,y2])
+            """
+
             ovmax = -np.inf
+
+            # Get the GT BBs for this image (and class)
             BBGT = R['bbox'].astype(float)
+            """
+            BBGT = np.array([
+                [x1,y1,x2,y2],
+                [x1,y1,x2,y2],
+                [x1,y1,x2,y2]
+            ])
+
+            (# GTs x 4)
+            """
+
+
             if BBGT.size > 0:
                 # compute overlaps
                 # intersection
+                # This is a normal IoU calculation, except
+                # We calculate the overlap between a single model
+                # predicted detection BB and ALL the GT BBs present in
+                # the image
                 ixmin = np.maximum(BBGT[:, 0], bb[0])
                 iymin = np.maximum(BBGT[:, 1], bb[1])
                 ixmax = np.minimum(BBGT[:, 2], bb[2])
                 iymax = np.minimum(BBGT[:, 3], bb[3])
+
+                # What comes out of this is is an array
+                # of min/max x/y values for every GT box 
+                # compared to the single detected box
+                """
+                ixmin = np.array([
+                    [b1_min]
+                    [b2_min]
+                    [b3_min]
+                ])
+                Is it flat??
+                """
+
+                # Get the width and height
+                # of the intersection with every box
+                # with 0 as the min
                 iw = np.maximum(ixmax - ixmin, 0.)
                 ih = np.maximum(iymax - iymin, 0.)
+
+                # Calculate the Area of the intersection
                 inters = iw * ih
+                """
+                inter = np.array([
+                    [I1]
+                    [I2]
+                    [I3]
+                ])
+                """
+
+                # Union
+                # Calculate the area of the two boxes
+                 #and subtract the intersection
                 uni = ((bb[2] - bb[0]) * (bb[3] - bb[1]) +
                        (BBGT[:, 2] - BBGT[:, 0]) *
                        (BBGT[:, 3] - BBGT[:, 1]) - inters)
-                overlaps = inters / uni
-                ovmax = np.max(overlaps)
-                jmax = np.argmax(overlaps)
 
+                # Calculate the overlap/ IoU for each
+                # GT + bb pair
+                overlaps = inters / uni
+
+                """
+                overlaps = np.array([
+                    [O1]
+                    [O2]
+                    [O3]
+                ])
+                """
+                
+                # Get the GT box with the MAX overlap
+                # This is how we filter out duplicates
+                ovmax = np.max(overlaps)
+                jmax = np.argmax(overlaps) # max idx
+
+            # If our best match is > required threshold, 
             if ovmax > ovthresh:
+
+                # And it's not difficult
                 if not R['difficult'][jmax]:
+
+                    # If we haven't already matched it
+                    # It's a true positive
                     if not R['det'][jmax]:
                         tp[d] = 1.
                         R['det'][jmax] = 1
+                    # Otherwise, it's a FP since
+                    # we've already matched it with a higher-scoring box
+                    # This is because there are multiple detections for the same image
+                    # and same class. We've ranked them by confidence and mapped them to their GT 
+                    # partner, if we get to a box that's already been matched (and yet we are 
+                    # trying to match again), then this gets penalized to avoid duplicates
                     else:
                         fp[d] = 1.
+
             else:
+                # If the overlap to the closest matching GT box 
+                # is less then our minimum required threshold, this
+                # is a FP and we shouldn't have predicted this box
+                # in this location? or at all? both?
                 fp[d] = 1.
 
         # compute precision recall
+        # This cumulative sum function adds all previous values
+        # to the current value for the length of the array
+        # It's used for the AP calculation, and has something to do with
+        # prioritization/ranking, we weight the earlier samples more importantly?
         fp = np.cumsum(fp)
         tp = np.cumsum(tp)
         rec = tp / float(npos)
         # avoid divide by zero in case the first detection matches a difficult
         # ground truth
         prec = tp / np.maximum(tp + fp, np.finfo(np.float64).eps)
+
+        # I don't understand this metric exactly....
         ap = voc_ap(rec, prec, use_07_metric)
     else:
         rec = -1.
@@ -414,7 +600,8 @@ if __name__ == '__main__':
     net.eval()
     print('Finished loading model!')
     # load data
-    dataset = VOCDetection(args.voc_root, [('2007', set_type)], BaseTransform(300, dataset_mean), AnnotationTransform())
+    dataset = VOCDetection(args.voc_root, [('2007', set_type)], 
+    BaseTransform(300, dataset_mean), AnnotationTransform())
     if args.cuda:
         net = net.cuda()
         cudnn.benchmark = True

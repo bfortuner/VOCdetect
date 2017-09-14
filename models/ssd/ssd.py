@@ -114,7 +114,8 @@ class SSD(nn.Module):
         other, ext = os.path.splitext(base_file)
         if ext == '.pkl' or '.pth':
             print('Loading weights into state dict...')
-            _ = self.load_state_dict(torch.load(base_file, map_location=lambda storage, loc: storage))
+            _ = self.load_state_dict(torch.load(
+                base_file, map_location=lambda storage, loc: storage))
             print('Finished!')
         else:
             print('Sorry only .pth and .pkl files supported.')

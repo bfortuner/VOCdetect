@@ -1,5 +1,4 @@
 import os
-import config as cfg
 
 
 def init_paths(root, dset_types, input_img_exts, target_img_exts):
@@ -33,8 +32,3 @@ def make_dataset(paths, datasets_root, name, dset_types, img_exts):
             dir_path = os.path.join(root, dir_name)
             os.makedirs(dir_path, exist_ok=True)
             paths['datasets'][name][dir_name] = dir_path
-
-
-if __name__ == '__main__':
-    init_paths(cfg.PROJECT_PATH, cfg.IMG_DATASET_TYPES, 
-        cfg.IMG_INPUT_FORMATS, cfg.IMG_TARGET_FORMATS)

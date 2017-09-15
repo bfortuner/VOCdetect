@@ -20,24 +20,33 @@ def predict(model, img, orig_dims, detect_fn, thresh):
     ).data
     w = orig_dims[0]['w']
     h = orig_dims[0]['h']
-    scale = torch.Tensor([w, h, w, h])
+
     bboxes = []
-    for i in range(detections.size(1)):
-        j = 0
-        while detections[0,i,j,0] >= thresh:
-            score = detections[0,i,j,0]
-            pt = (detections[0,i,j,1:]*scale).cpu().numpy()
-            label = cfg.IDX_TO_LABEL[i-1]
+    for i in range(1, detections.size(1)):
+        label = cfg.IDX_TO_LABEL[i-1]
+        dets = detections[0, i, :]
+        mask = dets[:, 0].gt(0.).expand(5, dets.size(0)).t()
+        dets = torch.masked_select(dets, mask).view(-1, 5)
+        if dets.dim() == 0:
+            continue
+        boxes = dets[:, 1:]
+        boxes[:, 0] *= w
+        boxes[:, 2] *= w
+        boxes[:, 1] *= h
+        boxes[:, 3] *= h
+        scores = dets[:, 0].cpu().numpy()
+        dets = np.hstack((boxes.cpu().numpy(), 
+                scores[:, np.newaxis])) \
+                .astype(np.float32, copy=False)
+        for j in range(dets.shape[0]):
             bboxes.append({
                 'label': label,
-                'score': float(score),
-                'xmin': float(pt[0]),
-                'ymin': float(pt[1]),
-                'xmax': float(pt[2]+1),
-                'ymax': float(pt[3]+1)
+                'score': float(dets[j][4]),
+                'xmin': float(dets[j][0]),
+                'ymin': float(dets[j][1]),
+                'xmax': float(dets[j][2]+1),
+                'ymax': float(dets[j][3]+1)
             })
-            j += 1
-
     return bboxes
 
 

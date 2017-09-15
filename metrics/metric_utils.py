@@ -138,11 +138,21 @@ def get_iou_score(A, B):
     return inter / float(union + eps)
 
 
-def get_ap(recall, precision):
+def get_ap(recall, precision, use_07_metric=True):
     """
     recall - 
     precision - 
     """
+    if use_07_metric:
+        ap = 0.
+        for t in np.arange(0., 1.1, 0.1):
+            if np.sum(recall >= t) == 0:
+                p = 0
+            else:
+                p = np.max(precision[recall >= t])
+            ap = ap + p / 11.
+        return ap
+
     # first append sentinel values at the end
     mrec = np.concatenate(([0.], recall, [1.]))
     mpre = np.concatenate(([0.], precision, [0.]))
@@ -156,5 +166,4 @@ def get_ap(recall, precision):
     i = np.where(mrec[1:] != mrec[:-1])[0]
 
     # and sum (\Delta recall) * prec
-    ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    return ap
+    return np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])

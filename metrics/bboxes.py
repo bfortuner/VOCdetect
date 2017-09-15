@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from . import metric_utils
 
 
-def get_preds_by_class(preds, label_names):
+def get_bb_preds_by_class(preds, label_names):
     '''
     Input = [
         'img_id': 9879827,
@@ -49,7 +49,7 @@ def bb_to_list(bb):
     return [bb['xmin'], bb['ymin'], bb['xmax'], bb['ymax']]
 
 
-def get_targs_by_class(targs, label):
+def get_bb_targs_by_class(targs, label):
     # get the GT boxes specific to this class
     label_bbs = {}
     n_bbs = 0
@@ -57,27 +57,33 @@ def get_targs_by_class(targs, label):
         # Store list of GT BBs objects for this label
         img_bbs = [bb for bb in targs[img_id]['bboxes'] \
                     if bb['label'] == label]
-        
+        difficult = np.array([bb['difficult'] for bb in targs[img_id]['bboxes'] 
+                             if bb['label'] == label]).astype(np.bool)
+
         # Extract the BBoxes List from each BoxObj
         bboxes = np.array(
             [bb_to_list(bb) for bb in img_bbs]
         )
         # Store boolean for each Box stating whether we've matched it yet
-        # This is used to avoid double-predicting on the same GT, instead we take the most confident
+        # This is used to avoid double-predicting on the same GT, 
+        # instead we take the most confident
         matched = [False] * len(bboxes)
-        label_bbs[img_id] = {'bboxes': bboxes,
-                             'matched': matched}
-        n_bbs += len(bboxes)
+        label_bbs[img_id] = {
+            'bboxes': bboxes,
+            'difficult': difficult,
+            'matched': matched
+        }
+        n_bbs += sum(~difficult)
     
     return label_bbs, n_bbs
 
 
-def get_label_level_aps(all_preds, targs, labels, thresh=0.5):
-    label_preds = get_preds_by_class(
+def get_bb_label_level_aps(all_preds, targs, labels, overlap_thresh=0.5):
+    label_preds = get_bb_preds_by_class(
         all_preds, labels)
     label_aps = {lb: {} for lb in labels}
     for label, preds in label_preds.items():
-        gt_bbs, total_gt_bbs = get_targs_by_class(
+        gt_bbs, total_gt_bbs = get_bb_targs_by_class(
             targs, label)
         if len(preds) > 0:
             img_ids = [x[0] for x in preds]
@@ -179,20 +185,22 @@ def get_label_level_aps(all_preds, targs, labels, thresh=0.5):
                     max_idx = np.argmax(IoUs) # max idx
 
                 # If our best match is > required threshold, 
-                if max_iou > thresh:
-                    # If we haven't already matched it
-                    # It's a true positive
-                    if not img_gt_bbs['matched'][max_idx]:
-                        tp[i] = 1.0
-                        img_gt_bbs['matched'][max_idx] = True
-                    # Otherwise, it's a FP since
-                    # we've already matched it with a higher-scoring box
-                    # This is because there are multiple detections for the same image
-                    # and same class. We've ranked them by confidence and mapped them to their GT 
-                    # partner, if we get to a box that's already been matched (and yet we are 
-                    # trying to match again), then this gets penalized to avoid duplicates
-                    else:
-                        fp[i] = 1.0
+                if max_iou > overlap_thresh:
+                    # If it's not a difficult GT bb
+                    if not img_gt_bbs['difficult'][max_idx]:
+                        # If we haven't already matched it
+                        # It's a true positive
+                        if not img_gt_bbs['matched'][max_idx]:
+                            tp[i] = 1.0
+                            img_gt_bbs['matched'][max_idx] = True
+                        # Otherwise, it's a FP since
+                        # we've already matched it with a higher-scoring box
+                        # This is because there are multiple detections for the same image
+                        # and same class. We've ranked them by confidence and mapped them to their GT 
+                        # partner, if we get to a box that's already been matched (and yet we are 
+                        # trying to match again), then this gets penalized to avoid duplicates
+                        else:
+                            fp[i] = 1.0
                 else:
                     # If the overlap to the closest matching GT box 
                     # is less then our minimum required threshold, this
@@ -216,9 +224,9 @@ def get_label_level_aps(all_preds, targs, labels, thresh=0.5):
             ap, tp, fp = -1, -1, -1
 
         label_aps[label]['ap'] = ap
-        label_aps[label]['tp'] = np.sum(tp)
-        label_aps[label]['fp'] = np.sum(fp)
-        label_aps[label]['total_gt_bbs'] = total_gt_bbs
+        label_aps[label]['tp'] = int(np.sum(tp))
+        label_aps[label]['fp'] = int(np.sum(fp))
+        label_aps[label]['total_gt_bbs'] = int(total_gt_bbs)
     
     return label_aps
 
@@ -258,4 +266,6 @@ def plot_label_level_bb_counts(label_aps):
 def get_label_level_bb_metrics(metrics_dict):
     json_ = json.dumps(metrics_dict)
     df = pd.read_json(json_)
-    return df.T
+    df = df.T
+    df.loc['mean'] = df.mean()
+    return df

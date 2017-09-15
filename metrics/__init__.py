@@ -1,3 +1,2 @@
 from .metric_utils import *
-
-from . import bboxes
+from .bboxes import *

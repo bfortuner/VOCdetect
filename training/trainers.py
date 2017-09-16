@@ -375,6 +375,7 @@ class SSDTrainer(Trainer):
     def test(self, model, loader, thresholds, metrics):
         model.eval()
 
+        n_labels = len(cfg.IDX_TO_LABEL.keys()) + 1
         loss_data = 0
         n_imgs = len(loader.dataset)
         metric_totals = {m.name:0 for m in metrics}
@@ -387,7 +388,7 @@ class SSDTrainer(Trainer):
             out = model(img)
             detections = self.detect_fn(
                 out[0],
-                nn.Softmax()(out[1].view(-1, 21)),
+                nn.Softmax()(out[1].view(-1, n_labels)),
                 out[2].type(type(out[2].data))
             ).data
 
@@ -402,7 +403,7 @@ class SSDTrainer(Trainer):
             pred_num = 0
             for i in range(detections.size(1)):
                 j = 0
-                while detections[0,i,j,0] >= thresholds:
+                while j < 200 and detections[0,i,j,0] >= thresholds:
                     score = detections[0,i,j,0]
                     pt = (detections[0,i,j,1:]*scale).cpu().numpy()
                     coords = (pt[0], pt[1]), pt[2]-pt[0]+1, pt[3]-pt[1]+1

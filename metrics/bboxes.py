@@ -78,11 +78,12 @@ def get_bb_targs_by_class(targs, label):
     return label_bbs, n_bbs
 
 
-def get_bb_label_level_aps(all_preds, targs, labels, overlap_thresh=0.5):
+def get_bb_label_level_metrics(all_preds, targs, labels, overlap_thresh=0.5):
     label_preds = get_bb_preds_by_class(
         all_preds, labels)
-    label_aps = {lb: {} for lb in labels}
+    label_metrics = {lb: {} for lb in labels}
     for label, preds in label_preds.items():
+        total_iou = 0
         gt_bbs, total_gt_bbs = get_bb_targs_by_class(
             targs, label)
         if len(preds) > 0:
@@ -191,6 +192,7 @@ def get_bb_label_level_aps(all_preds, targs, labels, overlap_thresh=0.5):
                         # If we haven't already matched it
                         # It's a true positive
                         if not img_gt_bbs['matched'][max_idx]:
+                            total_iou += max_iou
                             tp[i] = 1.0
                             img_gt_bbs['matched'][max_idx] = True
                         # Otherwise, it's a FP since
@@ -220,44 +222,30 @@ def get_bb_label_level_aps(all_preds, targs, labels, overlap_thresh=0.5):
 
             # I don't understand this metric exactly....
             ap = metric_utils.get_ap(recall, precision)
+            iou = total_iou / (np.sum(tp) + 1e-7)
         else:
-            ap, tp, fp = -1, -1, -1
+            ap, tp, fp, iou = -1, -1, -1, -1
 
-        label_aps[label]['ap'] = ap
-        label_aps[label]['tp'] = int(np.sum(tp))
-        label_aps[label]['fp'] = int(np.sum(fp))
-        label_aps[label]['total_gt_bbs'] = int(total_gt_bbs)
+        label_metrics[label]['ap'] = ap
+        label_metrics[label]['iou'] = iou
+        label_metrics[label]['tp'] = int(np.sum(tp))
+        label_metrics[label]['fp'] = int(np.sum(fp))
+        label_metrics[label]['total_gt_bbs'] = int(total_gt_bbs)
     
-    return label_aps
+    return label_metrics
 
 
-def plot_label_level_aps(label_aps):
-    labels = list(label_aps.keys())
-    aps = [label_aps[lb]['ap'] for lb in labels]
+def plot_label_level_metric(metrics, metric_name):
+    labels = list(metrics.keys())
+    aps = [metrics[lb][metric_name] for lb in labels]
     idxs = np.arange(len(aps))
     fig, ax = plt.subplots()
     width=.5
-    bars = ax.bar(idxs, aps, width=width, color='r')
+    _ = ax.bar(idxs, aps, width=width, color='r')
     fig.set_size_inches(18.5, 10.5, forward=True)
-    ax.set_ylabel('AP')
+    ax.set_ylabel(metric_name)
     ax.set_xlabel('Labels')
-    ax.set_title('Label-level AP')
-    ax.set_xticks(idxs + width / 2)
-    ax.set_xticklabels(labels, rotation='vertical')
-    plt.plot()
-
-
-def plot_label_level_bb_counts(label_aps):
-    labels = list(label_aps.keys())
-    bbs = [label_aps[lb]['total_gt_bbs'] for lb in labels]
-    idxs = np.arange(len(bbs))
-    fig, ax = plt.subplots()
-    width=.5
-    _ = ax.bar(idxs, bbs, width=width, color='r')
-    fig.set_size_inches(18.5, 10.5, forward=True)
-    ax.set_ylabel('GTBBs')
-    ax.set_xlabel('Labels')
-    ax.set_title('Label-level GTBB Counts')
+    ax.set_title('Label-level ' + metric_name)
     ax.set_xticks(idxs + width / 2)
     ax.set_xticklabels(labels, rotation='vertical')
     plt.plot()

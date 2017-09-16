@@ -9,13 +9,13 @@ import constants as c
 
 
 
-def predict(model, img, orig_dims, detect_fn, thresh):
+def predict(model, img, orig_dims, detect_fn, thresh, n_labels):
     model.eval()
     img = Variable(img.cuda(async=True))
     out = model(img)
     detections = detect_fn(
         out[0],
-        nn.Softmax()(out[1].view(-1, 21)),
+        nn.Softmax()(out[1].view(-1, n_labels)),
         out[2].type(type(out[2].data))
     ).data
     w = orig_dims[0]['w']
@@ -50,11 +50,11 @@ def predict(model, img, orig_dims, detect_fn, thresh):
     return bboxes
 
 
-def get_predictions(model, loader, detect_fn, thresh):
+def get_predictions(model, loader, detect_fn, thresh, n_labels):
     preds = []
     model.eval()
     for img, targs, dims, idx in loader:
-        bboxes = predict(model, img, dims, detect_fn, thresh)
+        bboxes = predict(model, img, dims, detect_fn, thresh, n_labels)
         preds.append({
             'img_id': loader.dataset.img_ids[idx[0]],
             'bboxes': bboxes

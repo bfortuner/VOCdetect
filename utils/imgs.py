@@ -29,7 +29,7 @@ CLASS_COLORS = {
 }
 
 
-def plot_img_w_bboxes(img_arr, bboxes, title=None):
+def plot_img_w_bboxes(img_arr, bboxes, label_to_idx, title=None):
     """
     img_arr: numpy_arr
     bboxes: [
@@ -49,12 +49,12 @@ def plot_img_w_bboxes(img_arr, bboxes, title=None):
     plt.axis('off')
     ax = plt.gca()
     colors = plt.cm.hsv(np.linspace(0, 1, len(
-        cfg.LABEL_NAMES))).tolist()
+        label_to_idx.keys()))).tolist()
     for bbox in bboxes:
         xy = bbox['xmin'], bbox['ymin']
         width = bbox['xmax'] - bbox['xmin']
         height = bbox['ymax'] - bbox['ymin']
-        color = colors[cfg.LABEL_TO_IDX[bbox['label']]]
+        color = colors[label_to_idx[bbox['label']]]
         box = plt.Rectangle(xy, width, height, fill=False, 
                             edgecolor=color, linewidth=3)
         ax.add_patch(box)

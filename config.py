@@ -1,7 +1,7 @@
 import os
 import socket
 import constants as c
-import competitions.pascalvoc as comp
+import competitions.udacity as comp
 
 
 # Main config
